@@ -9,6 +9,7 @@ from ..models.transition_model import *
 from ..models.observation_model import *
 from ..models.reward_model import *
 from ..models.policy_model import *
+from ..domain.action import MOTION_SCHEME
 
 class MosAgent(pomdp_py.Agent):
     """One agent is one robot."""
@@ -23,7 +24,9 @@ class MosAgent(pomdp_py.Agent):
                  belief_rep="histogram",  # belief representation, either "histogram" or "particles".
                  prior={},       # prior belief, as defined in belief.py:initialize_belief
                  num_particles=100,  # used if the belief representation is particles
-                 grid_map=None):  # GridMap used to avoid collision with obstacles (None if not provided)
+                 grid_map=None,  # GridMap used to avoid collision with obstacles (None if not provided)
+                 use_preferred_rollout=False,  # Use preferred rollout policy (greedy)
+                 no_look=False): # If True, there is no Look action, and the robot receives observation per move.
         self.robot_id = robot_id
         self._object_ids = object_ids
         self.sensor = sensor
@@ -43,14 +46,33 @@ class MosAgent(pomdp_py.Agent):
                                         num_particles=num_particles)
         transition_model = MosTransitionModel(dim,
                                               {self.robot_id: self.sensor},
-                                              self._object_ids)
+                                              self._object_ids,
+                                              no_look=no_look)
         observation_model = MosObservationModel(dim,
                                                 self.sensor,
                                                 self._object_ids,
                                                 sigma=sigma,
-                                                epsilon=epsilon)
+                                                epsilon=epsilon,
+                                                no_look=no_look)
         reward_model = GoalRewardModel(self._object_ids, robot_id=self.robot_id)
-        policy_model = PolicyModel(self.robot_id, grid_map=grid_map)
+
+        if use_preferred_rollout:
+            if MOTION_SCHEME == "xy":
+                action_prior = GreedyActionPriorXY(self.robot_id,
+                                                   grid_map,
+                                                   10, reward_model.big,
+                                                   no_look=no_look)
+            elif MOTION_SCHEME == "vw":
+                action_prior = GreedyActionPriorVW(self.robot_id,
+                                                   grid_map,
+                                                   10, reward_model.big,
+                                                   no_look=no_look)
+            # Preferred policy model using action prior for rollout
+            policy_model = PreferredPolicyModel(action_prior)
+        else:
+            # Policy random with random rollout
+            policy_model = PolicyModel(self.robot_id, grid_map=grid_map)
+            
         super().__init__(init_belief, policy_model,
                          transition_model=transition_model,
                          observation_model=observation_model,

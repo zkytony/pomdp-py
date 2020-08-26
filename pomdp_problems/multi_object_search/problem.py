@@ -30,7 +30,7 @@ class MosOOPOMDP(pomdp_py.OOPOMDP):
     def __init__(self, robot_id, env=None, grid_map=None,
                  sensors=None, sigma=0.01, epsilon=1,
                  belief_rep="histogram", prior={}, num_particles=100,
-                 agent_has_map=False):
+                 agent_has_map=False, use_preferred_rollout=False, no_look=False):
         """
         Args:
             robot_id (int or str): the id of the agent that will solve this MosOOPOMDP.
@@ -57,6 +57,10 @@ class MosOOPOMDP(pomdp_py.OOPOMDP):
                 or a string, either "uniform" or "informed". For "uniform", a uniform
                 prior will be given. For "informed", a perfect prior will be given.
             num_particles (int): setting for the particle belief representation
+            use_preferred_rollout (bool): If true then the agent's rollout policy will be
+                preferred instead of random
+            no_look (bool): If true, then there is no Look action and the robot receives
+                observation after every move.
         """
         if env is None:
             assert grid_map is not None and sensors is not None,\
@@ -97,7 +101,9 @@ class MosOOPOMDP(pomdp_py.OOPOMDP):
                          belief_rep=belief_rep,
                          prior=prior,
                          num_particles=num_particles,
-                         grid_map=grid_map)
+                         grid_map=grid_map,
+                         use_preferred_rollout=use_preferred_rollout,
+                         no_look=no_look)
         super().__init__(agent, env,
                          name="MOS(%d,%d,%d)" % (env.width, env.length, len(env.target_objects)))
 
@@ -285,18 +291,20 @@ def solve(problem,
 # Test
 def unittest():
     # random world
-    grid_map, robot_char = random_world(20, 20, 5, 20)
-    laserstr = make_laser_sensor(90, (1, 5), 0.5, False)
-    proxstr = make_proximity_sensor(5, False)    
+    grid_map, robot_char = random_world(10, 10, 5, 10)
+    laserstr = make_laser_sensor(90, (1, 3), 0.5, False)
+    proxstr = make_proximity_sensor(2, False)    
     problem = MosOOPOMDP(robot_char,  # r is the robot character
                          sigma=0.01,  # observation model parameter
                          epsilon=1.0, # observation model parameter
                          grid_map=grid_map,
                          sensors={robot_char: proxstr},
                          prior="uniform",
-                         agent_has_map=True)
+                         agent_has_map=True,
+                         no_look=False,
+                         use_preferred_rollout=True)
     solve(problem,
-          max_depth=10,
+          max_depth=20,
           discount_factor=0.99,
           planning_time=1.,
           exploration_const=1000,

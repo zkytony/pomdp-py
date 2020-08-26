@@ -23,11 +23,10 @@ class MosTransitionModel(pomdp_py.OOTransitionModel):
     """
     def __init__(self,
                  dim, sensors, object_ids,
-                 epsilon=1e-9):
+                 epsilon=1e-9,
+                 no_look=False):
         """
         sensors (dict): robot_id -> Sensor
-        for_env (bool): True if this is a robot transition model used by the
-             Environment.  see RobotTransitionModel for details.
         """
         self._sensors = sensors
         transition_models = {objid: StaticObjectTransitionModel(objid, epsilon=epsilon)
@@ -36,7 +35,8 @@ class MosTransitionModel(pomdp_py.OOTransitionModel):
         for robot_id in sensors:
             transition_models[robot_id] = RobotTransitionModel(sensors[robot_id],
                                                                dim,
-                                                               epsilon=epsilon)
+                                                               epsilon=epsilon,
+                                                               no_look=no_look)
         super().__init__(transition_models)
 
     def sample(self, state, action, **kwargs):
@@ -65,12 +65,14 @@ class StaticObjectTransitionModel(pomdp_py.TransitionModel):
     
     def argmax(self, state, action):
         """Returns the most likely next object_state"""
-        return copy.deepcopy(state.object_states[self._objid])
+        return ObjectState(self._objid,
+                           state.object_states[self._objid].objclass,
+                           state.object_pose(self._objid))
 
     
 class RobotTransitionModel(pomdp_py.TransitionModel):
     """We assume that the robot control is perfect and transitions are deterministic."""
-    def __init__(self, sensor, dim, epsilon=1e-9):
+    def __init__(self, sensor, dim, epsilon=1e-9, no_look=False):
         """
         dim (tuple): a tuple (width, length) for the dimension of the world
         """
@@ -79,16 +81,20 @@ class RobotTransitionModel(pomdp_py.TransitionModel):
         self._robot_id = sensor.robot_id
         self._dim = dim
         self._epsilon = epsilon
+        self._no_look = no_look
 
     @classmethod
     def if_move_by(cls, robot_id, state, action, dim,
-                   check_collision=True):
+                   check_collision=True, robot_pose=None):
         """Defines the dynamics of robot motion;
         dim (tuple): the width, length of the search world."""
         if not isinstance(action, MotionAction):
             raise ValueError("Cannot move robot with %s action" % str(type(action)))
 
-        robot_pose = state.pose(robot_id)
+        if state is None:
+            assert robot_pose is not None, "Either provide state or provide robot pose"
+        else:
+            robot_pose = state.pose(robot_id)                
         rx, ry, rth = robot_pose
         if action.scheme == MotionAction.SCHEME_XYTH:
             dx, dy, th = action.motion
@@ -125,21 +131,25 @@ class RobotTransitionModel(pomdp_py.TransitionModel):
         else:
             robot_state = state.object_states[self._robot_id]
 
-        next_robot_state = copy.deepcopy(robot_state)
+        next_robot_pose = tuple(robot_state.pose)
         # camera direction is only not None when looking        
-        next_robot_state['camera_direction'] = None 
+        next_camera_direction = None
+        next_objects_found = tuple(robot_state.objects_found)
         if isinstance(action, MotionAction):
             # motion action
-            next_robot_state['pose'] = \
+            next_robot_pose = \
                 RobotTransitionModel.if_move_by(self._robot_id,
                                                 state, action, self._dim)
+            if self._no_look:
+                # There's no Look action. So Motion action also leads to sensing.
+                next_camera_direction = action.name            
         elif isinstance(action, LookAction):
             if hasattr(action, "motion") and action.motion is not None:
                 # rotate the robot
-                next_robot_state['pose'] = \
+                next_robot_pose = \
                     self._if_move_by(self._robot_id,
                                      state, action, self._dim)
-            next_robot_state['camera_direction'] = action.name
+            next_camera_direction = action.name
         elif isinstance(action, FindAction):
             robot_pose = state.pose(self._robot_id)
             z = self._sensor.observe(robot_pose, state)
@@ -148,9 +158,12 @@ class RobotTransitionModel(pomdp_py.TransitionModel):
                                        for objid in z.objposes
                                        if (state.object_states[objid].objclass == "target"\
                                            and z.objposes[objid] != ObjectObservation.NULL)}
-            next_robot_state["objects_found"] = tuple(set(next_robot_state['objects_found'])\
-                                                      | set(observed_target_objects))
-        return next_robot_state
+            next_objects_found = tuple(set(next_objects_found)\
+                                       | set(observed_target_objects))
+        return RobotState(self._robot_id,
+                          next_robot_pose,
+                          next_objects_found,
+                          next_camera_direction)
     
     def sample(self, state, action):
         """Returns next_robot_state"""

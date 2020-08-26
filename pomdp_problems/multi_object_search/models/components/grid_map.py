@@ -53,3 +53,26 @@ class GridMap:
                 # robot moved --> valid motion
                 valid.add(motion_action)
         return valid
+
+    def get_neighbors(self, pose, all_motion_actions, include_angle=False):
+        neighbors = {}
+        if len(pose) == 2:
+            pose = (pose[0], pose[1], 0)
+        for motion_action in all_motion_actions:
+            if not isinstance(motion_action, MotionAction):
+                raise ValueError("This (%s) is not a motion action" % str(motion_action))
+
+            next_pose = RobotTransitionModel.if_move_by(None, None,
+                                                        motion_action,
+                                                        (self.width, self.length),
+                                                        check_collision=False,
+                                                        robot_pose=pose)
+            if next_pose[:2] not in self.obstacle_poses:
+                if include_angle:
+                    # Use (x,y,th) as key
+                    neighbors[next_pose] = motion_action
+                else:
+                    # Only use (x,y) as key
+                    neighbors[next_pose[:2]] = motion_action
+        return neighbors
+    

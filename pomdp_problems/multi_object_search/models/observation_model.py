@@ -25,6 +25,13 @@ from pomdp_problems.multi_object_search.domain.state import *
 from pomdp_problems.multi_object_search.domain.action import *
 from pomdp_problems.multi_object_search.domain.observation import *
 
+def receiving_observation(action, no_look=False):
+    """Returns true if the `action` receives sensing observation"""
+    if not no_look:
+        return isinstance(action, LookAction)
+    else:
+        return isinstance(action, MotionAction)
+
 #### Observation Models ####
 class MosObservationModel(pomdp_py.OOObservationModel):
     """Object-oriented transition model"""
@@ -33,26 +40,26 @@ class MosObservationModel(pomdp_py.OOObservationModel):
                  sensor,
                  object_ids,
                  sigma=0.01,
-                 epsilon=1):
+                 epsilon=1,
+                 no_look=False):
         self.sigma = sigma
         self.epsilon = epsilon
+        self._no_look = no_look
         observation_models = {objid: ObjectObservationModel(objid, sensor, dim,
-                                                            sigma=sigma, epsilon=epsilon)
+                                                            sigma=sigma, epsilon=epsilon,
+                                                            no_look=no_look)
                               for objid in object_ids}
         pomdp_py.OOObservationModel.__init__(self, observation_models)
 
     def sample(self, next_state, action, argmax=False, **kwargs):
-        if not isinstance(action, LookAction):
+        if not receiving_observation(action, no_look=self._no_look):
             return MosOOObservation({})
-            # return MosOOObservation({objid: ObjectObservationModel.NULL
-            #                          for objid in next_state.object_states
-            #                          if objid != next_state.object_states[objid].objclass != "robot"})
             
         factored_observations = super().sample(next_state, action, argmax=argmax)
         return MosOOObservation.merge(factored_observations, next_state)
 
 class ObjectObservationModel(pomdp_py.ObservationModel):
-    def __init__(self, objid, sensor, dim, sigma=0, epsilon=1):
+    def __init__(self, objid, sensor, dim, sigma=0, epsilon=1, no_look=False):
         """
         sigma and epsilon are parameters of the observation model (see paper),
         dim (tuple): a tuple (width, length) for the dimension of the world"""
@@ -60,6 +67,7 @@ class ObjectObservationModel(pomdp_py.ObservationModel):
         self._sensor = sensor
         self.sigma = sigma
         self.epsilon = epsilon
+        self._no_look = no_look        
 
     def _compute_params(self, object_in_sensing_region):
         if object_in_sensing_region:
@@ -83,7 +91,7 @@ class ObjectObservationModel(pomdp_py.ObservationModel):
             next_state (State)
             action (Action)
         """
-        if not isinstance(action, LookAction):
+        if not receiving_observation(action, no_look=self._no_look):
             # No observation should be received
             if observation.pose == ObjectObservation.NULL:
                 return 1.0
