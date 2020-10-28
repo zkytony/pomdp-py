@@ -27,7 +27,7 @@ cdef class POUCT(Planner):
     cdef RolloutPolicy _rollout_policy
     cdef Agent _agent
     cdef int _last_num_sims
-    cdef float _last_planning_time    
+    cdef float _last_planning_time
 
     cpdef _search(self)
     cpdef _simulate(POUCT self,
@@ -38,13 +38,13 @@ cdef class POUCT(Planner):
     cpdef _rollout(self, State state, tuple history, VNode root, int depth)
     cpdef Action _ucb(self, VNode root)
     cpdef tuple _sample_generative_model(self, State state, Action action)
+    cpdef print_action_values(self)
 
 cdef class RolloutPolicy(PolicyModel):
     cpdef Action rollout(self, State state, tuple history)
 
 cdef class RandomRollout(RolloutPolicy):
     pass
-    
+
 cdef class ActionPrior:
     cpdef get_preferred_actions(ActionPrior self, State state, tuple history)
-    

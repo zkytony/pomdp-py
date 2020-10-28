@@ -363,6 +363,9 @@ cdef class POUCT(Planner):
 
         return best_action, time_taken, sims_count
 
+    cpdef print_action_values(self):
+        for action in self._agent.tree.children:
+            print(action, self._agent.tree[action].value)
 
     cpdef _simulate(POUCT self,
                     State state, tuple history, VNode root, QNode parent,
