@@ -61,11 +61,7 @@ cdef class Histogram(GenerativeDistribution):
         if not isinstance(other, Histogram):
             return False
         else:
-            for s in self.histogram:
-                if s not in other.histogram:
-                    return False
-                if self[s] != other[s]:
-                    return False
+            return self.histogram == other.histogram
 
     def __iter__(self):
         return iter(self._histogram)
